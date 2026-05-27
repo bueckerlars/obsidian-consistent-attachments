@@ -60,6 +60,7 @@ This plugin automates the common cases while preserving control for edge cases.
   - `Subfolder of note` (configure subfolder name)
   - `Same folder as note`
   - `Fixed vault folder` (configure fixed path)
+- **Delete empty attachment folders**: remove note-local attachment subfolders left empty after a move.
 - **Excluded folders**: ignore note moves inside selected paths.
 - **Show notices**: display operation summaries in Obsidian notices.
 - **Operation log size**: max number of entries kept in memory.

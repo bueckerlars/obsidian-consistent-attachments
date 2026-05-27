@@ -1,4 +1,6 @@
 import { normalizePath, TFile, type App } from "obsidian";
+import { computeTargetPath, nextAvailablePath } from "./attachment-path";
+import { cleanupEmptySourceFolders, type FolderCleanupContext } from "./folder-cleanup";
 import { ConflictModal, type ConflictDecision } from "./ui/conflict-modal";
 import type { AttachmentMoveDecision, ConsistentAttachmentsSettings, OperationLogEntry } from "./types";
 
@@ -7,6 +9,7 @@ interface MoveContext {
 	settings: ConsistentAttachmentsSettings;
 	isShared: (file: TFile, ownerNotePath: string) => boolean;
 	pushLog: (entry: OperationLogEntry) => void;
+	folderCleanup?: FolderCleanupContext;
 }
 
 async function ensureFolderExists(app: App, targetPath: string): Promise<void> {
@@ -51,44 +54,13 @@ async function chooseDecision(context: MoveContext, attachment: TFile, notePath:
 	return { shouldMove: false, shouldCopy: false, reason: "shared-ask-skip" };
 }
 
-export function computeTargetFolder(settings: ConsistentAttachmentsSettings, note: TFile): string {
-	const noteFolder = note.parent?.path ?? "";
-	switch (settings.targetPathMode) {
-		case "same-folder":
-		case "obsidian-default":
-			return noteFolder;
-		case "note-subfolder":
-			return normalizePath(noteFolder ? `${noteFolder}/${settings.noteSubfolderName}` : settings.noteSubfolderName);
-		case "fixed-folder":
-			return normalizePath(settings.fixedFolderPath);
-		default:
-			return noteFolder;
-	}
-}
-
-export function nextAvailablePath(app: App, desiredPath: string): string {
-	if (!app.vault.getAbstractFileByPath(desiredPath)) {
-		return desiredPath;
-	}
-	const extIndex = desiredPath.lastIndexOf(".");
-	const base = extIndex >= 0 ? desiredPath.slice(0, extIndex) : desiredPath;
-	const ext = extIndex >= 0 ? desiredPath.slice(extIndex) : "";
-	let index = 1;
-	while (true) {
-		const candidate = `${base}-${index}${ext}`;
-		if (!app.vault.getAbstractFileByPath(candidate)) {
-			return candidate;
-		}
-		index += 1;
-	}
-}
-
 export async function moveOrCopyAttachmentsForNote(
 	context: MoveContext,
 	note: TFile,
 	attachments: TFile[]
 ): Promise<void> {
-	const targetFolder = computeTargetFolder(context.settings, note);
+	const emptiedSourceFolders = new Set<string>();
+
 	for (const attachment of attachments) {
 		try {
 			if (attachment.path === note.path) {
@@ -106,10 +78,19 @@ export async function moveOrCopyAttachmentsForNote(
 				continue;
 			}
 
-			const targetPath = nextAvailablePath(
-				context.app,
-				normalizePath(targetFolder ? `${targetFolder}/${attachment.name}` : attachment.name)
-			);
+			const preferredPath = await computeTargetPath(context.app, context.settings, note, attachment);
+			if (normalizePath(attachment.path) === normalizePath(preferredPath)) {
+				context.pushLog({
+					timestamp: Date.now(),
+					notePath: note.path,
+					sourcePath: attachment.path,
+					status: "skipped",
+					reason: "already-in-target-location",
+				});
+				continue;
+			}
+
+			const targetPath = nextAvailablePath(context.app, preferredPath);
 			await ensureFolderExists(context.app, targetPath);
 
 			if (decision.shouldCopy) {
@@ -125,7 +106,11 @@ export async function moveOrCopyAttachmentsForNote(
 				continue;
 			}
 
+			const sourceFolder = attachment.parent?.path ?? "";
 			await context.app.fileManager.renameFile(attachment, targetPath);
+			if (sourceFolder) {
+				emptiedSourceFolders.add(sourceFolder);
+			}
 			context.pushLog({
 				timestamp: Date.now(),
 				notePath: note.path,
@@ -144,4 +129,11 @@ export async function moveOrCopyAttachmentsForNote(
 			});
 		}
 	}
+
+	await cleanupEmptySourceFolders(
+		context.app,
+		context.settings,
+		context.folderCleanup ?? { note },
+		[...emptiedSourceFolders]
+	);
 }

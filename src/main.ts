@@ -1,4 +1,5 @@
 import { MarkdownView, Notice, Plugin, TFile } from "obsidian";
+import { hasAttachmentLayoutChanged } from "./attachment-path";
 import { OperationLogger } from "./logger";
 import { moveOrCopyAttachmentsForNote } from "./mover";
 import { findOrphanAttachments } from "./orphan-scanner";
@@ -13,6 +14,8 @@ import { OrphanModal } from "./ui/orphan-modal";
 export default class ConsistentAttachmentsPlugin extends Plugin {
 	settings: ConsistentAttachmentsSettings = DEFAULT_SETTINGS;
 	private logger = new OperationLogger(() => this.settings.logLimit);
+	private reconcileTimer: number | null = null;
+	private reconcileRunning = false;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -20,6 +23,13 @@ export default class ConsistentAttachmentsPlugin extends Plugin {
 		this.registerRenameHandler();
 		this.registerCommands();
 		this.registerFileContextMenu();
+	}
+
+	onunload(): void {
+		if (this.reconcileTimer !== null) {
+			window.clearTimeout(this.reconcileTimer);
+			this.reconcileTimer = null;
+		}
 	}
 
 	private registerRenameHandler(): void {
@@ -41,7 +51,7 @@ export default class ConsistentAttachmentsPlugin extends Plugin {
 					return;
 				}
 
-				await this.moveAttachmentsForNote(file);
+				await this.moveAttachmentsForNote(file, { previousNotePath: oldPath });
 			})
 		);
 	}
@@ -105,7 +115,10 @@ export default class ConsistentAttachmentsPlugin extends Plugin {
 		);
 	}
 
-	private async moveAttachmentsForNote(note: TFile): Promise<void> {
+	private async moveAttachmentsForNote(
+		note: TFile,
+		options?: { silent?: boolean; previousNotePath?: string }
+	): Promise<void> {
 		const markdown = await this.app.vault.cachedRead(note);
 		const links = extractAttachmentLinks(markdown);
 		const attachments = resolveAttachmentFiles(links, note.path, {
@@ -119,12 +132,62 @@ export default class ConsistentAttachmentsPlugin extends Plugin {
 				settings: this.settings,
 				isShared: (file, ownerNotePath) => this.isSharedAttachment(file, ownerNotePath),
 				pushLog: (entry) => this.logger.add(entry),
+				folderCleanup: {
+					note,
+					previousNotePaths: options?.previousNotePath ? [options.previousNotePath] : undefined,
+				},
 			},
 			note,
 			attachments
 		);
 
-		this.maybeNotice(`Processed ${attachments.length} attachment(s) for "${note.basename}".`);
+		if (!options?.silent) {
+			this.maybeNotice(`Processed ${attachments.length} attachment(s) for "${note.basename}".`);
+		}
+	}
+
+	private shouldReconcileAttachments(
+		previous: ConsistentAttachmentsSettings,
+		next: ConsistentAttachmentsSettings
+	): boolean {
+		if (!next.autoMoveEnabled) {
+			return false;
+		}
+		if (!previous.autoMoveEnabled && next.autoMoveEnabled) {
+			return true;
+		}
+		return hasAttachmentLayoutChanged(previous, next);
+	}
+
+	private scheduleAttachmentReconcile(): void {
+		if (this.reconcileTimer !== null) {
+			window.clearTimeout(this.reconcileTimer);
+		}
+		this.reconcileTimer = window.setTimeout(() => {
+			this.reconcileTimer = null;
+			void this.reconcileVaultAttachments();
+		}, 800);
+	}
+
+	private async reconcileVaultAttachments(): Promise<void> {
+		if (this.reconcileRunning || !this.settings.autoMoveEnabled) {
+			return;
+		}
+
+		this.reconcileRunning = true;
+		try {
+			const notes = this.app.vault
+				.getMarkdownFiles()
+				.filter((note) => !isPathExcluded(note.path, this.settings.excludedFolders));
+
+			for (const note of notes) {
+				await this.moveAttachmentsForNote(note, { silent: true });
+			}
+
+			this.maybeNotice(`Applied attachment layout to ${notes.length} note(s).`);
+		} finally {
+			this.reconcileRunning = false;
+		}
 	}
 
 	private isSharedAttachment(file: TFile, ownerNotePath: string): boolean {
@@ -158,7 +221,23 @@ export default class ConsistentAttachmentsPlugin extends Plugin {
 	}
 
 	async saveSettings(): Promise<void> {
+		const previous = { ...this.settings };
 		this.settings = sanitizeSettings(this.settings);
 		await this.saveData(this.settings);
+
+		if (!this.shouldReconcileAttachments(previous, this.settings)) {
+			return;
+		}
+
+		const textOnlyLayoutChange =
+			previous.targetPathMode === this.settings.targetPathMode &&
+			hasAttachmentLayoutChanged(previous, this.settings);
+
+		if (textOnlyLayoutChange) {
+			this.scheduleAttachmentReconcile();
+			return;
+		}
+
+		void this.reconcileVaultAttachments();
 	}
 }

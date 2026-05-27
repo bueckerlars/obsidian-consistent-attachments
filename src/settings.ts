@@ -9,6 +9,7 @@ export const DEFAULT_SETTINGS: ConsistentAttachmentsSettings = {
 	targetPathMode: "obsidian-default",
 	noteSubfolderName: "assets",
 	fixedFolderPath: "attachments",
+	deleteEmptyAttachmentFolders: true,
 	showNotices: true,
 	logLimit: 150,
 };
@@ -38,7 +39,9 @@ export class ConsistentAttachmentsSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Enable auto-move")
-			.setDesc("Automatically move or copy attachments when a note is moved to another folder.")
+			.setDesc(
+				"Automatically move or copy attachments when a note is moved. When enabled or when target path settings change, existing attachments are aligned to the current layout."
+			)
 			.addToggle((toggle) =>
 				toggle.setValue(this.plugin.settings.autoMoveEnabled).onChange(async (value) => {
 					this.plugin.settings.autoMoveEnabled = value;
@@ -63,7 +66,9 @@ export class ConsistentAttachmentsSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Target path mode")
-			.setDesc("Define where moved attachments should be placed.")
+			.setDesc(
+				"Define where attachments should be placed. Follow Obsidian default uses your vault attachment folder settings. Changing this reapplies the layout when auto-move is enabled."
+			)
 			.addDropdown((dropdown) =>
 				dropdown
 					.addOption("obsidian-default", "Follow Obsidian default")
@@ -101,6 +106,18 @@ export class ConsistentAttachmentsSettingTab extends PluginSettingTab {
 					})
 				);
 		}
+
+		new Setting(containerEl)
+			.setName("Delete empty attachment folders")
+			.setDesc(
+				"Remove note-local attachment subfolders left empty after a move. Applies for subfolder, same-folder, and Obsidian-default modes when attachments live in or below the note folder."
+			)
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings.deleteEmptyAttachmentFolders).onChange(async (value) => {
+					this.plugin.settings.deleteEmptyAttachmentFolders = value;
+					await this.plugin.saveSettings();
+				})
+			);
 
 		new Setting(containerEl)
 			.setName("Excluded folders")

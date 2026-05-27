@@ -10,6 +10,7 @@ export interface ConsistentAttachmentsSettings {
 	targetPathMode: TargetPathMode;
 	noteSubfolderName: string;
 	fixedFolderPath: string;
+	deleteEmptyAttachmentFolders: boolean;
 	showNotices: boolean;
 	logLimit: number;
 }
