@@ -1,7 +1,7 @@
 {
 	"id": "consistent-attachments",
 	"name": "Consistent Attachments",
-	"version": "1.0.0-b1",
+	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
 	"description": "Keep attachment locations consistent when notes are moved.",
 	"author": "bueckerlars",
