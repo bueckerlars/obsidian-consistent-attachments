@@ -1,29 +1,38 @@
 import { TFile, type App } from "obsidian";
-import { extractAttachmentLinks } from "./parser";
-import { resolveAttachmentFiles } from "./resolver";
 
 /** Obsidian-native vault files that are not note attachments. */
 const NON_ATTACHMENT_EXTENSIONS = new Set(["base", "canvas"]);
 
-export async function findOrphanAttachments(app: App): Promise<TFile[]> {
-	const files = app.vault.getFiles();
-	const notes = files.filter((file) => file.extension === "md");
-	const attachments = files.filter(
-		(file) => file.extension !== "md" && !NON_ATTACHMENT_EXTENSIONS.has(file.extension)
-	);
+function isAttachmentCandidate(file: TFile): boolean {
+	return file.extension !== "md" && !NON_ATTACHMENT_EXTENSIONS.has(file.extension);
+}
+
+function collectReferencedPaths(app: App): Set<string> {
 	const referenced = new Set<string>();
 
-	for (const note of notes) {
-		const content = await app.vault.cachedRead(note);
-		const links = extractAttachmentLinks(content);
-		const resolved = resolveAttachmentFiles(links, note.path, {
-			resolveFirstLinkpathDest: (linktext, sourcePath) =>
-				app.metadataCache.getFirstLinkpathDest(linktext, sourcePath),
-		});
-		for (const file of resolved) {
-			referenced.add(file.path);
+	for (const targets of Object.values(app.metadataCache.resolvedLinks)) {
+		for (const [targetPath, count] of Object.entries(targets)) {
+			if (count > 0) {
+				referenced.add(targetPath);
+			}
 		}
 	}
 
-	return attachments.filter((file) => !referenced.has(file.path));
+	return referenced;
+}
+
+export async function findOrphanAttachments(app: App): Promise<TFile[]> {
+	const referenced = collectReferencedPaths(app);
+	const orphans: TFile[] = [];
+
+	for (const file of app.vault.getFiles()) {
+		if (!isAttachmentCandidate(file)) {
+			continue;
+		}
+		if (!referenced.has(file.path)) {
+			orphans.push(file);
+		}
+	}
+
+	return orphans.sort((a, b) => a.path.localeCompare(b.path));
 }

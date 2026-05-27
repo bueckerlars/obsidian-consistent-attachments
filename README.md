@@ -21,7 +21,7 @@ This plugin automates the common cases while preserving control for edge cases.
   - same folder as note
   - fixed vault folder
 - Avoid overwrites with automatic numeric conflict suffixes (`-1`, `-2`, ...).
-- Scan for orphaned attachments (read-only).
+- Scan for orphaned attachments with filter, sort, and cleanup actions.
 - View a recent in-memory operation log.
 - Run manual actions from command palette and file context menu.
 
@@ -91,7 +91,7 @@ The plugin never overwrites existing files. If a destination filename already ex
 ## Limitations and non-goals
 
 - Link parsing is optimized for standard wiki and markdown links.
-- The orphan scan reads vault notes and can take longer in very large vaults.
+- The orphan scan uses Obsidian's link index and may miss references that are not indexed yet.
 - The operation log is in-memory only and resets on reload.
 - No cloud service is required; processing is local to your vault.
 
@@ -111,7 +111,7 @@ The plugin never overwrites existing files. If a destination filename already ex
 
 - No telemetry is collected.
 - No external network service is required for core functionality.
-- The orphan scanner is read-only.
+- Orphan cleanup moves files to the vault trash via Obsidian's trash API.
 - File operations stay inside the Obsidian vault.
 
 ## Development

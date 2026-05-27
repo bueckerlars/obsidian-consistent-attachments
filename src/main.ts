@@ -68,7 +68,6 @@ export default class ConsistentAttachmentsPlugin extends Plugin {
 			callback: async () => {
 				const orphans = await findOrphanAttachments(this.app);
 				new OrphanModal(this.app, orphans).open();
-				this.maybeNotice(`Found ${orphans.length} orphaned attachment(s).`);
 			},
 		});
 

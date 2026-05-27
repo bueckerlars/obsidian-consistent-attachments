@@ -4,7 +4,7 @@
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
 	"description": "Keep attachment locations consistent when notes are moved.",
-	"author": "Lars",
-	"authorUrl": "https://github.com/lars",
+	"author": "bueckerlars",
+	"authorUrl": "https://github.com/bueckerlars",
 	"isDesktopOnly": false
 }
