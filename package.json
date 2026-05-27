@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-consistent-attachments",
-	"version": "1.0.0",
+	"version": "1.0.0-b1",
 	"description": "Obsidian plugin to keep attachments in consistent locations when moving notes",
 	"main": "main.js",
 	"type": "module",
