@@ -93,7 +93,7 @@ The plugin never overwrites existing files. If a destination filename already ex
 ## Limitations and non-goals
 
 - Link parsing is optimized for standard wiki and markdown links.
-- The orphan scan uses Obsidian's link index and may miss references that are not indexed yet.
+- The orphan scan uses Obsidian's link index plus markdown link parsing; rare edge-case references may still be missed.
 - The operation log is in-memory only and resets on reload.
 - No cloud service is required; processing is local to your vault.
 
@@ -113,8 +113,13 @@ The plugin never overwrites existing files. If a destination filename already ex
 
 - No telemetry is collected.
 - No external network service is required for core functionality.
-- Orphan cleanup moves files to the vault trash via Obsidian's trash API.
 - File operations stay inside the Obsidian vault.
+- **Vault access** (local only, via Obsidian APIs):
+  - **Apply attachment layout to vault** and auto-reconcile enumerate markdown notes with `vault.getMarkdownFiles()` and read note content with `vault.cachedRead()` to resolve linked attachments.
+  - **Find orphaned attachments** enumerates vault files with `vault.getFiles()`, builds a reference set from `metadataCache.resolvedLinks` and from markdown notes via `getMarkdownFiles()` / `cachedRead()`, then lists unreferenced attachment candidates.
+  - **Move attachments for current note** only reads the active note and files referenced by that note.
+  - Excluded folders in settings are skipped during vault-wide scans.
+- Orphan cleanup in the modal moves files to the vault trash via Obsidian's trash API.
 
 ## Development
 

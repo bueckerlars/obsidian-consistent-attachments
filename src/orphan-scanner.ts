@@ -1,34 +1,17 @@
-import { TFile, type App } from "obsidian";
+import type { App, TFile } from "obsidian";
+import {
+	collectReferencedAttachmentPaths,
+	getVaultAttachmentCandidates,
+} from "./vault-scan";
 
-/** Obsidian-native vault files that are not note attachments. */
-const NON_ATTACHMENT_EXTENSIONS = new Set(["base", "canvas"]);
-
-function isAttachmentCandidate(file: TFile): boolean {
-	return file.extension !== "md" && !NON_ATTACHMENT_EXTENSIONS.has(file.extension);
-}
-
-function collectReferencedPaths(app: App): Set<string> {
-	const referenced = new Set<string>();
-
-	for (const targets of Object.values(app.metadataCache.resolvedLinks)) {
-		for (const [targetPath, count] of Object.entries(targets)) {
-			if (count > 0) {
-				referenced.add(targetPath);
-			}
-		}
-	}
-
-	return referenced;
-}
-
-export async function findOrphanAttachments(app: App): Promise<TFile[]> {
-	const referenced = collectReferencedPaths(app);
+export async function findOrphanAttachments(
+	app: App,
+	excludedFolders: string[] = []
+): Promise<TFile[]> {
+	const referenced = await collectReferencedAttachmentPaths(app, excludedFolders);
 	const orphans: TFile[] = [];
 
-	for (const file of app.vault.getFiles()) {
-		if (!isAttachmentCandidate(file)) {
-			continue;
-		}
+	for (const file of getVaultAttachmentCandidates(app, excludedFolders)) {
 		if (!referenced.has(file.path)) {
 			orphans.push(file);
 		}

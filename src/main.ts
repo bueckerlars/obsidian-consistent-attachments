@@ -7,6 +7,7 @@ import { extractAttachmentLinks } from "./parser";
 import { resolveAttachmentFiles } from "./resolver";
 import { DEFAULT_SETTINGS, ConsistentAttachmentsSettingTab, sanitizeSettings } from "./settings";
 import { isPathExcluded, isRenameOnly } from "./safety";
+import { getMarkdownNotes } from "./vault-scan";
 import type { ConsistentAttachmentsSettings } from "./types";
 import { LogModal } from "./ui/log-modal";
 import { OrphanModal } from "./ui/orphan-modal";
@@ -84,7 +85,7 @@ export default class ConsistentAttachmentsPlugin extends Plugin {
 			id: "find-orphaned-attachments",
 			name: "Find orphaned attachments",
 			callback: async () => {
-				const orphans = await findOrphanAttachments(this.app);
+				const orphans = await findOrphanAttachments(this.app, this.settings.excludedFolders);
 				new OrphanModal(this.app, orphans).open();
 			},
 		});
@@ -185,9 +186,7 @@ export default class ConsistentAttachmentsPlugin extends Plugin {
 
 		this.reconcileRunning = true;
 		try {
-			const notes = this.app.vault
-				.getMarkdownFiles()
-				.filter((note) => !isPathExcluded(note.path, this.settings.excludedFolders));
+			const notes = getMarkdownNotes(this.app, this.settings.excludedFolders);
 
 			for (const note of notes) {
 				await this.moveAttachmentsForNote(note, { silent: true });
