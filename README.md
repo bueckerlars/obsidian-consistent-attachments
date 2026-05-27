@@ -27,12 +27,27 @@ This plugin automates the common cases while preserving control for edge cases.
 
 ## Installation
 
-### Community plugins (recommended)
+The plugin is in beta. It is not listed in Obsidian’s community plugin catalog yet; a store release is planned.
 
-1. Open **Settings -> Community plugins**.
-2. Select **Browse**.
-3. Search for **Consistent Attachments**.
-4. Install and enable the plugin.
+Until then, install via [BRAT](https://github.com/TfTHacker/obsidian42-brat) (Beta Reviewers Auto-update Tester) or manually.
+
+### BRAT (recommended for beta)
+
+1. Open **Settings → Community plugins** and enable community plugins.
+2. Select **Browse**, search for **BRAT**, install it, and enable it.
+3. Open **Settings → BRAT**.
+4. Select **Add Beta plugin** (or **Add beta plugin with frozen version** if you need a specific release).
+5. Enter the repository URL:
+   ```
+   https://github.com/bueckerlars/obsidian-consistent-attachments
+   ```
+6. Confirm and enable **Consistent Attachments** under **Settings → Community plugins**.
+
+BRAT installs the latest release from GitHub and can update the plugin when new beta versions are published.
+
+### Community plugin store (coming soon)
+
+Once the plugin is accepted into the catalog, you will be able to install it from **Settings → Community plugins → Browse** by searching for **Consistent Attachments**. Until then, use BRAT or manual installation.
 
 ### Manual installation
 
