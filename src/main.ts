@@ -1,99 +1,260 @@
-import {App, Editor, MarkdownView, Modal, Notice, Plugin} from 'obsidian';
-import {DEFAULT_SETTINGS, MyPluginSettings, SampleSettingTab} from "./settings";
+import { MarkdownView, Notice, Plugin, TFile } from "obsidian";
+import { hasAttachmentLayoutChanged } from "./attachment-path";
+import { OperationLogger } from "./logger";
+import { moveOrCopyAttachmentsForNote } from "./mover";
+import { findOrphanAttachments } from "./orphan-scanner";
+import { extractAttachmentLinks } from "./parser";
+import { resolveAttachmentFiles } from "./resolver";
+import { DEFAULT_SETTINGS, ConsistentAttachmentsSettingTab, sanitizeSettings } from "./settings";
+import { isPathExcluded, isRenameOnly } from "./safety";
+import type { ConsistentAttachmentsSettings } from "./types";
+import { LogModal } from "./ui/log-modal";
+import { OrphanModal } from "./ui/orphan-modal";
 
-// Remember to rename these classes and interfaces!
+export default class ConsistentAttachmentsPlugin extends Plugin {
+	settings: ConsistentAttachmentsSettings = DEFAULT_SETTINGS;
+	private logger = new OperationLogger(() => this.settings.logLimit);
+	private reconcileTimer: number | null = null;
+	private reconcileRunning = false;
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
-
-	async onload() {
+	async onload(): Promise<void> {
 		await this.loadSettings();
+		this.addSettingTab(new ConsistentAttachmentsSettingTab(this.app, this));
+		this.registerRenameHandler();
+		this.registerCommands();
+		this.registerFileContextMenu();
+	}
 
-		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('dice', 'Sample', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
+	onunload(): void {
+		if (this.reconcileTimer !== null) {
+			window.clearTimeout(this.reconcileTimer);
+			this.reconcileTimer = null;
+		}
+	}
 
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status bar text');
-
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-modal-simple',
-			name: 'Open modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'replace-selected',
-			name: 'Replace selected content',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				editor.replaceSelection('Sample editor command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-modal-complex',
-			name: 'Open modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
+	private registerRenameHandler(): void {
+		this.registerEvent(
+			this.app.vault.on("rename", async (file, oldPath) => {
+				if (!(file instanceof TFile) || file.extension !== "md") {
+					return;
 				}
-				return false;
+				if (!this.settings.autoMoveEnabled) {
+					return;
+				}
+				if (isRenameOnly(file.path, oldPath)) {
+					return;
+				}
+				if (
+					isPathExcluded(file.path, this.settings.excludedFolders) ||
+					isPathExcluded(oldPath, this.settings.excludedFolders)
+				) {
+					return;
+				}
+
+				await this.moveAttachmentsForNote(file, { previousNotePath: oldPath });
+			})
+		);
+	}
+
+	private registerCommands(): void {
+		this.addCommand({
+			id: "move-attachments-for-current-note",
+			name: "Move attachments for current note",
+			checkCallback: (checking) => {
+				const note = this.getActiveNote();
+				if (!note) {
+					return false;
+				}
+				if (!checking) {
+					void this.moveAttachmentsForNote(note);
+				}
+				return true;
+			},
+		});
+
+		this.addCommand({
+			id: "apply-attachment-layout-to-vault",
+			name: "Apply attachment layout to vault",
+			callback: () => {
+				void this.applyAttachmentLayoutToVault();
+			},
+		});
+
+		this.addCommand({
+			id: "find-orphaned-attachments",
+			name: "Find orphaned attachments",
+			callback: async () => {
+				const orphans = await findOrphanAttachments(this.app);
+				new OrphanModal(this.app, orphans).open();
+			},
+		});
+
+		this.addCommand({
+			id: "show-recent-operation-log",
+			name: "Show recent operation log",
+			callback: () => {
+				new LogModal(this.app, this.logger.list()).open();
+			},
+		});
+
+		this.addCommand({
+			id: "toggle-auto-move",
+			name: "Toggle auto-move on/off",
+			callback: async () => {
+				this.settings.autoMoveEnabled = !this.settings.autoMoveEnabled;
+				await this.saveSettings();
+				this.maybeNotice(`Auto-move ${this.settings.autoMoveEnabled ? "enabled" : "disabled"}.`);
+			},
+		});
+	}
+
+	private registerFileContextMenu(): void {
+		this.registerEvent(
+			this.app.workspace.on("file-menu", (menu, file) => {
+				if (!(file instanceof TFile) || file.extension !== "md") {
+					return;
+				}
+				menu.addItem((item) =>
+					item.setTitle("Move attachments for this note").onClick(() => {
+						void this.moveAttachmentsForNote(file);
+					})
+				);
+			})
+		);
+	}
+
+	private async moveAttachmentsForNote(
+		note: TFile,
+		options?: { silent?: boolean; previousNotePath?: string }
+	): Promise<void> {
+		const markdown = await this.app.vault.cachedRead(note);
+		const links = extractAttachmentLinks(markdown);
+		const attachments = resolveAttachmentFiles(links, note.path, {
+			resolveFirstLinkpathDest: (linktext, sourcePath) =>
+				this.app.metadataCache.getFirstLinkpathDest(linktext, sourcePath),
+		});
+
+		await moveOrCopyAttachmentsForNote(
+			{
+				app: this.app,
+				settings: this.settings,
+				isShared: (file, ownerNotePath) => this.isSharedAttachment(file, ownerNotePath),
+				pushLog: (entry) => this.logger.add(entry),
+				folderCleanup: {
+					note,
+					previousNotePaths: options?.previousNotePath ? [options.previousNotePath] : undefined,
+				},
+			},
+			note,
+			attachments
+		);
+
+		if (!options?.silent) {
+			this.maybeNotice(`Processed ${attachments.length} attachment(s) for "${note.basename}".`);
+		}
+	}
+
+	private shouldReconcileAttachments(
+		previous: ConsistentAttachmentsSettings,
+		next: ConsistentAttachmentsSettings
+	): boolean {
+		if (!next.autoMoveEnabled) {
+			return false;
+		}
+		if (!previous.autoMoveEnabled && next.autoMoveEnabled) {
+			return true;
+		}
+		return hasAttachmentLayoutChanged(previous, next);
+	}
+
+	private scheduleAttachmentReconcile(): void {
+		if (this.reconcileTimer !== null) {
+			window.clearTimeout(this.reconcileTimer);
+		}
+		this.reconcileTimer = window.setTimeout(() => {
+			this.reconcileTimer = null;
+			void this.reconcileVaultAttachments();
+		}, 800);
+	}
+
+	async applyAttachmentLayoutToVault(): Promise<void> {
+		if (this.reconcileRunning) {
+			this.maybeNotice("Attachment layout scan already in progress.");
+			return;
+		}
+
+		this.reconcileRunning = true;
+		try {
+			const notes = this.app.vault
+				.getMarkdownFiles()
+				.filter((note) => !isPathExcluded(note.path, this.settings.excludedFolders));
+
+			for (const note of notes) {
+				await this.moveAttachmentsForNote(note, { silent: true });
 			}
-		});
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			new Notice("Click");
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
-
+			this.maybeNotice(`Applied attachment layout to ${notes.length} note(s).`);
+		} finally {
+			this.reconcileRunning = false;
+		}
 	}
 
-	onunload() {
+	private async reconcileVaultAttachments(): Promise<void> {
+		if (!this.settings.autoMoveEnabled) {
+			return;
+		}
+
+		await this.applyAttachmentLayoutToVault();
 	}
 
-	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<MyPluginSettings>);
+	private isSharedAttachment(file: TFile, ownerNotePath: string): boolean {
+		const resolvedLinks = this.app.metadataCache.resolvedLinks;
+		const targetPath = file.path;
+		for (const [sourcePath, targets] of Object.entries(resolvedLinks)) {
+			if (sourcePath === ownerNotePath) {
+				continue;
+			}
+			if ((targets[targetPath] ?? 0) > 0) {
+				return true;
+			}
+		}
+		return false;
 	}
 
-	async saveSettings() {
+	private getActiveNote(): TFile | null {
+		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+		return view?.file ?? null;
+	}
+
+	private maybeNotice(message: string): void {
+		if (this.settings.showNotices) {
+			new Notice(message);
+		}
+	}
+
+	async loadSettings(): Promise<void> {
+		const loaded = (await this.loadData()) as Partial<ConsistentAttachmentsSettings> | null;
+		this.settings = sanitizeSettings({ ...DEFAULT_SETTINGS, ...(loaded ?? {}) });
+	}
+
+	async saveSettings(): Promise<void> {
+		const previous = { ...this.settings };
+		this.settings = sanitizeSettings(this.settings);
 		await this.saveData(this.settings);
-	}
-}
 
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
+		if (!this.shouldReconcileAttachments(previous, this.settings)) {
+			return;
+		}
 
-	onOpen() {
-		let {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
+		const textOnlyLayoutChange =
+			previous.targetPathMode === this.settings.targetPathMode &&
+			hasAttachmentLayoutChanged(previous, this.settings);
 
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
+		if (textOnlyLayoutChange) {
+			this.scheduleAttachmentReconcile();
+			return;
+		}
+
+		void this.reconcileVaultAttachments();
 	}
 }
