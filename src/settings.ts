@@ -67,7 +67,7 @@ export class ConsistentAttachmentsSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Target path mode")
 			.setDesc(
-				"Define where attachments should be placed. Follow Obsidian default uses your vault attachment folder settings. Changing this reapplies the layout when auto-move is enabled."
+				"Define where attachments should be placed. Follow Obsidian default uses your vault attachment folder settings. Run the command apply attachment layout to vault to update existing files, or enable auto-move to reapply automatically when these settings change."
 			)
 			.addDropdown((dropdown) =>
 				dropdown

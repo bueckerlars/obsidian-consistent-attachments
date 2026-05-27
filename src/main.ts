@@ -73,6 +73,14 @@ export default class ConsistentAttachmentsPlugin extends Plugin {
 		});
 
 		this.addCommand({
+			id: "apply-attachment-layout-to-vault",
+			name: "Apply attachment layout to vault",
+			callback: () => {
+				void this.applyAttachmentLayoutToVault();
+			},
+		});
+
+		this.addCommand({
 			id: "find-orphaned-attachments",
 			name: "Find orphaned attachments",
 			callback: async () => {
@@ -169,8 +177,9 @@ export default class ConsistentAttachmentsPlugin extends Plugin {
 		}, 800);
 	}
 
-	private async reconcileVaultAttachments(): Promise<void> {
-		if (this.reconcileRunning || !this.settings.autoMoveEnabled) {
+	async applyAttachmentLayoutToVault(): Promise<void> {
+		if (this.reconcileRunning) {
+			this.maybeNotice("Attachment layout scan already in progress.");
 			return;
 		}
 
@@ -188,6 +197,14 @@ export default class ConsistentAttachmentsPlugin extends Plugin {
 		} finally {
 			this.reconcileRunning = false;
 		}
+	}
+
+	private async reconcileVaultAttachments(): Promise<void> {
+		if (!this.settings.autoMoveEnabled) {
+			return;
+		}
+
+		await this.applyAttachmentLayoutToVault();
 	}
 
 	private isSharedAttachment(file: TFile, ownerNotePath: string): boolean {

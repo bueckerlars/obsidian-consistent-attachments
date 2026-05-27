@@ -68,6 +68,7 @@ This plugin automates the common cases while preserving control for edge cases.
 ## Commands
 
 - `Move attachments for current note`
+- `Apply attachment layout to vault` — scan all notes and move attachments to match the current target path settings
 - `Find orphaned attachments`
 - `Show recent operation log`
 - `Toggle auto-move on/off`
