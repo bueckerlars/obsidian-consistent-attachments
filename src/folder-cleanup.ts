@@ -7,20 +7,25 @@ export interface FolderCleanupContext {
 	previousNotePaths?: string[];
 }
 
+function normalizeFolderPath(folderPath: string): string {
+	const normalized = normalizePath(folderPath);
+	return normalized === "/" || normalized === "." ? "" : normalized;
+}
+
 function pathDirname(filePath: string): string {
 	return filePath.includes("/") ? filePath.substring(0, filePath.lastIndexOf("/")) : "";
 }
 
 export function noteFolderFromNotePath(notePath: string): string {
-	return pathDirname(notePath);
+	return normalizeFolderPath(pathDirname(notePath));
 }
 
 export function collectNoteFolderRoots(note: TFile, previousNotePaths: string[] = []): string[] {
 	const roots = new Set<string>();
-	roots.add(normalizePath(note.parent?.path ?? ""));
+	roots.add(normalizeFolderPath(note.parent?.path ?? ""));
 
 	for (const notePath of previousNotePaths) {
-		roots.add(normalizePath(noteFolderFromNotePath(notePath)));
+		roots.add(noteFolderFromNotePath(notePath));
 	}
 
 	return [...roots];
@@ -57,12 +62,12 @@ export function canDeleteEmptyAttachmentFolder(
 		return false;
 	}
 
-	const folder = normalizePath(folderPath);
+	const folder = normalizeFolderPath(folderPath);
 	if (!folder) {
 		return false;
 	}
 
-	const fixedFolder = normalizePath(settings.fixedFolderPath);
+	const fixedFolder = normalizeFolderPath(settings.fixedFolderPath);
 	if (folder === fixedFolder) {
 		return false;
 	}
