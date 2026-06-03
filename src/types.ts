@@ -44,8 +44,10 @@ export interface OperationLogEntry {
 	reason: string;
 }
 
-export interface OrphanAttachment {
+export interface MisplacedAttachment {
 	file: TFile;
+	notePaths: string[];
+	expectedPath: string;
 }
 
 export interface ResolveContext {

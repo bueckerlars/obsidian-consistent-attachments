@@ -2,14 +2,16 @@ import { MarkdownView, Notice, Plugin, TFile } from "obsidian";
 import { hasAttachmentLayoutChanged } from "./attachment-path";
 import { OperationLogger } from "./logger";
 import { moveOrCopyAttachmentsForNote } from "./mover";
+import { findMisplacedAttachments } from "./misplaced-scanner";
 import { findOrphanAttachments } from "./orphan-scanner";
 import { extractAttachmentLinks } from "./parser";
 import { resolveAttachmentFiles } from "./resolver";
 import { DEFAULT_SETTINGS, ConsistentAttachmentsSettingTab, sanitizeSettings } from "./settings";
 import { isPathExcluded, isRenameOnly } from "./safety";
 import { getMarkdownNotes } from "./vault-scan";
-import type { ConsistentAttachmentsSettings } from "./types";
+import type { ConsistentAttachmentsSettings, MisplacedAttachment } from "./types";
 import { LogModal } from "./ui/log-modal";
+import { MisplacedModal } from "./ui/misplaced-modal";
 import { OrphanModal } from "./ui/orphan-modal";
 
 export default class ConsistentAttachmentsPlugin extends Plugin {
@@ -91,6 +93,21 @@ export default class ConsistentAttachmentsPlugin extends Plugin {
 		});
 
 		this.addCommand({
+			id: "find-misplaced-attachments",
+			name: "Find misplaced attachments",
+			callback: async () => {
+				const misplaced = await findMisplacedAttachments(
+					this.app,
+					this.settings,
+					this.settings.excludedFolders
+				);
+				new MisplacedModal(this.app, misplaced, {
+					relocate: (item) => this.relocateMisplacedAttachment(item),
+				}).open();
+			},
+		});
+
+		this.addCommand({
 			id: "show-recent-operation-log",
 			name: "Show recent operation log",
 			callback: () => {
@@ -121,6 +138,30 @@ export default class ConsistentAttachmentsPlugin extends Plugin {
 					})
 				);
 			})
+		);
+	}
+
+	private async relocateMisplacedAttachment(item: MisplacedAttachment): Promise<void> {
+		const notePath = item.notePaths[0];
+		if (!notePath) {
+			throw new Error("no referencing note");
+		}
+
+		const note = this.app.vault.getAbstractFileByPath(notePath);
+		if (!(note instanceof TFile)) {
+			throw new Error("referencing note not found");
+		}
+
+		await moveOrCopyAttachmentsForNote(
+			{
+				app: this.app,
+				settings: this.settings,
+				isShared: (file, ownerNotePath) => this.isSharedAttachment(file, ownerNotePath),
+				pushLog: (entry) => this.logger.add(entry),
+				folderCleanup: { note },
+			},
+			note,
+			[item.file]
 		);
 	}
 

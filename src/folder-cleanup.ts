@@ -20,12 +20,34 @@ export function noteFolderFromNotePath(notePath: string): string {
 	return normalizeFolderPath(pathDirname(notePath));
 }
 
-export function collectNoteFolderRoots(note: TFile, previousNotePaths: string[] = []): string[] {
+function noteFolderRootsFromEmptiedSources(sourceFolderPaths: string[]): string[] {
+	const roots: string[] = [];
+	for (const folderPath of sourceFolderPaths) {
+		const parent = normalizeFolderPath(pathDirname(normalizeFolderPath(folderPath)));
+		if (parent) {
+			roots.push(parent);
+		}
+	}
+	return roots;
+}
+
+export function collectNoteFolderRoots(
+	note: TFile,
+	previousNotePaths: string[] = [],
+	additionalRoots: string[] = []
+): string[] {
 	const roots = new Set<string>();
 	roots.add(normalizeFolderPath(note.parent?.path ?? ""));
 
 	for (const notePath of previousNotePaths) {
 		roots.add(noteFolderFromNotePath(notePath));
+	}
+
+	for (const root of additionalRoots) {
+		const normalized = normalizeFolderPath(root);
+		if (normalized) {
+			roots.add(normalized);
+		}
 	}
 
 	return [...roots];
@@ -121,7 +143,11 @@ export async function cleanupEmptySourceFolders(
 		return;
 	}
 
-	const noteFolderRoots = collectNoteFolderRoots(context.note, context.previousNotePaths ?? []);
+	const noteFolderRoots = collectNoteFolderRoots(
+		context.note,
+		context.previousNotePaths ?? [],
+		noteFolderRootsFromEmptiedSources(sourceFolderPaths)
+	);
 	const candidates = [...new Set(sourceFolderPaths.map((path) => normalizePath(path)))].sort(
 		(a, b) => b.split("/").length - a.split("/").length
 	);

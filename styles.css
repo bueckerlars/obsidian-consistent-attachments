@@ -21,3 +21,33 @@
 .consistent-attachments-orphan-actions .setting-item {
 	border-top: none;
 }
+
+.consistent-attachments-misplaced-modal {
+	width: min(720px, 90vw);
+}
+
+.consistent-attachments-misplaced-summary,
+.consistent-attachments-misplaced-hint {
+	margin-bottom: 0.75rem;
+}
+
+.consistent-attachments-misplaced-hint {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+
+.consistent-attachments-misplaced-list {
+	max-height: 50vh;
+	overflow-y: auto;
+	margin: 0.5rem 0 1rem;
+	border-top: 1px solid var(--background-modifier-border);
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.consistent-attachments-misplaced-list .setting-item {
+	border-top: none;
+}
+
+.consistent-attachments-misplaced-actions .setting-item {
+	border-top: none;
+}
