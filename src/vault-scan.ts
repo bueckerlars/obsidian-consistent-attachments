@@ -18,6 +18,22 @@ export function getMarkdownNotes(app: App, excludedFolders: string[] = []): TFil
 	return app.vault.getMarkdownFiles().filter((file) => !isPathExcluded(file.path, excludedFolders));
 }
 
+function getCanvasFiles(app: App, excludedFolders: string[] = []): TFile[] {
+	return app.vault
+		.getFiles()
+		.filter((file) => file.extension === "canvas" && !isPathExcluded(file.path, excludedFolders));
+}
+
+interface CanvasFileNode {
+	type?: string;
+	file?: string;
+	text?: string;
+}
+
+interface CanvasDocument {
+	nodes?: CanvasFileNode[];
+}
+
 /**
  * All non-markdown attachment candidates in the vault.
  * Uses {@link Vault.getFiles} and filters by extension.
@@ -103,6 +119,54 @@ export async function collectReferencersFromNotes(
 	return referencers;
 }
 
+/**
+ * Attachment referencers by reading canvas files via the vault API.
+ * Supplements metadataCache because Obsidian indexes markdown links in resolvedLinks,
+ * not native canvas embeds (see JSON Canvas file/text nodes).
+ */
+export async function collectReferencersFromCanvasFiles(
+	app: App,
+	canvasFiles: TFile[]
+): Promise<Map<string, Set<string>>> {
+	const referencers = new Map<string, Set<string>>();
+	const resolveContext = {
+		resolveFirstLinkpathDest: (linktext: string, sourcePath: string) =>
+			app.metadataCache.getFirstLinkpathDest(linktext, sourcePath),
+	};
+
+	for (const canvas of canvasFiles) {
+		let document: CanvasDocument;
+		try {
+			document = JSON.parse(await app.vault.cachedRead(canvas)) as CanvasDocument;
+		} catch {
+			continue;
+		}
+
+		for (const node of document.nodes ?? []) {
+			if (node.type === "file" && node.file) {
+				const target = node.file.split("#")[0]?.trim() ?? "";
+				if (!target) {
+					continue;
+				}
+				const file = resolveContext.resolveFirstLinkpathDest(target, canvas.path);
+				if (file instanceof TFile && isAttachmentCandidate(file)) {
+					addReferencer(referencers, file.path, canvas.path);
+				}
+				continue;
+			}
+
+			if (node.type === "text" && node.text) {
+				const links = extractAttachmentLinks(node.text);
+				for (const file of resolveAttachmentFiles(links, canvas.path, resolveContext)) {
+					addReferencer(referencers, file.path, canvas.path);
+				}
+			}
+		}
+	}
+
+	return referencers;
+}
+
 function mergeReferencerMaps(...maps: Map<string, Set<string>>[]): Map<string, Set<string>> {
 	const merged = new Map<string, Set<string>>();
 
@@ -130,9 +194,11 @@ export async function buildAttachmentReferencers(
 	excludedFolders: string[] = []
 ): Promise<Map<string, Set<string>>> {
 	const notes = getMarkdownNotes(app, excludedFolders);
+	const canvasFiles = getCanvasFiles(app, excludedFolders);
 	return mergeReferencerMaps(
 		collectReferencersFromCache(app),
-		await collectReferencersFromNotes(app, notes)
+		await collectReferencersFromNotes(app, notes),
+		await collectReferencersFromCanvasFiles(app, canvasFiles)
 	);
 }
 
