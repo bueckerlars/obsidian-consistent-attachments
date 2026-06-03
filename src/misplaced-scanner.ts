@@ -32,7 +32,9 @@ export async function findMisplacedAttachments(
 				continue;
 			}
 
-			const expectedPath = await computeTargetPath(app, settings, note, file);
+			const expectedPath = await computeTargetPath(app, settings, note, file, {
+				allowSideEffects: false,
+			});
 			if (normalizePath(expectedPath) === normalizePath(file.path)) {
 				correctlyPlaced = true;
 				break;
@@ -47,7 +49,7 @@ export async function findMisplacedAttachments(
 		const primaryNote = app.vault.getAbstractFileByPath(primaryNotePath);
 		const expectedPath =
 			primaryNote instanceof TFile
-				? await computeTargetPath(app, settings, primaryNote, file)
+				? await computeTargetPath(app, settings, primaryNote, file, { allowSideEffects: false })
 				: file.path;
 
 		misplaced.push({
