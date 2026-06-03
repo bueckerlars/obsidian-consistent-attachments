@@ -1,4 +1,4 @@
-import { App, Modal, Notice, Setting, TFile } from "obsidian";
+import { App, Modal, normalizePath, Notice, Setting, TFile } from "obsidian";
 import { revealFileInExplorer } from "../file-explorer";
 import type { MisplacedAttachment } from "../types";
 import { ConfirmModal } from "./confirm-modal";
@@ -206,10 +206,22 @@ export class MisplacedModal extends Modal {
 		await leaf.openFile(note);
 	}
 
-	private removeResolvedItem(item: MisplacedAttachment, pathBefore: string): void {
+	private shouldRemoveAfterRelocate(item: MisplacedAttachment, pathBefore: string): boolean {
 		if (!this.app.vault.getAbstractFileByPath(pathBefore)) {
-			this.items = this.items.filter((candidate) => candidate.file.path !== pathBefore);
+			return true;
 		}
+		return normalizePath(item.file.path) !== normalizePath(pathBefore);
+	}
+
+	private removeResolvedItem(item: MisplacedAttachment, pathBefore: string): void {
+		if (!this.shouldRemoveAfterRelocate(item, pathBefore)) {
+			return;
+		}
+
+		this.items = this.items.filter(
+			(candidate) =>
+				candidate.file !== item.file && normalizePath(candidate.file.path) !== normalizePath(pathBefore)
+		);
 	}
 
 	private async relocateOne(item: MisplacedAttachment): Promise<void> {
@@ -221,8 +233,12 @@ export class MisplacedModal extends Modal {
 		const pathBefore = item.file.path;
 		try {
 			await this.actions.relocate(item);
-			this.removeResolvedItem(item, pathBefore);
-			new Notice(`Relocated "${item.file.name}".`);
+			if (this.shouldRemoveAfterRelocate(item, pathBefore)) {
+				this.removeResolvedItem(item, pathBefore);
+				new Notice(`Relocated "${item.file.name}".`);
+			} else {
+				new Notice(`"${item.file.name}" was not relocated (skipped or already in place).`);
+			}
 			this.render();
 		} catch (error) {
 			new Notice(
@@ -251,8 +267,10 @@ export class MisplacedModal extends Modal {
 					const pathBefore = item.file.path;
 					try {
 						await this.actions.relocate(item);
-						this.removeResolvedItem(item, pathBefore);
-						relocated += 1;
+						if (this.shouldRemoveAfterRelocate(item, pathBefore)) {
+							this.removeResolvedItem(item, pathBefore);
+							relocated += 1;
+						}
 					} catch {
 						// Keep remaining items in the list for manual retry.
 					}
