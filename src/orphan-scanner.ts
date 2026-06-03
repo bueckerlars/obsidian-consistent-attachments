@@ -1,6 +1,7 @@
-import type { App, TFile } from "obsidian";
+import { normalizePath, type App, type TFile } from "obsidian";
 import {
-	collectReferencedAttachmentPaths,
+	buildAttachmentReferencers,
+	getMarkdownReferencers,
 	getVaultAttachmentCandidates,
 } from "./vault-scan";
 
@@ -8,11 +9,12 @@ export async function findOrphanAttachments(
 	app: App,
 	excludedFolders: string[] = []
 ): Promise<TFile[]> {
-	const referenced = await collectReferencedAttachmentPaths(app, excludedFolders);
+	const referencers = await buildAttachmentReferencers(app, excludedFolders);
 	const orphans: TFile[] = [];
 
 	for (const file of getVaultAttachmentCandidates(app, excludedFolders)) {
-		if (!referenced.has(file.path)) {
+		const noteReferencers = getMarkdownReferencers(app, referencers.get(normalizePath(file.path)));
+		if (noteReferencers.size === 0) {
 			orphans.push(file);
 		}
 	}
