@@ -8,7 +8,7 @@ import { extractAttachmentLinks } from "./parser";
 import { resolveAttachmentFiles } from "./resolver";
 import { DEFAULT_SETTINGS, ConsistentAttachmentsSettingTab, sanitizeSettings } from "./settings";
 import { isFileExcluded, isPathExcluded, isRenameOnly } from "./safety";
-import { getMarkdownNotes } from "./vault-scan";
+import { getMarkdownNotes, getResolvedLinks } from "./vault-scan";
 import type { ConsistentAttachmentsSettings, MisplacedAttachment } from "./types";
 import { LogModal } from "./ui/log-modal";
 import { MisplacedModal } from "./ui/misplaced-modal";
@@ -256,7 +256,7 @@ export default class ConsistentAttachmentsPlugin extends Plugin {
 	}
 
 	private isSharedAttachment(file: TFile, ownerNotePath: string): boolean {
-		const resolvedLinks = this.app.metadataCache.resolvedLinks;
+		const resolvedLinks = getResolvedLinks(this.app);
 		const targetPath = file.path;
 		for (const [sourcePath, targets] of Object.entries(resolvedLinks)) {
 			if (sourcePath === ownerNotePath) {

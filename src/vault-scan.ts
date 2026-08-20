@@ -51,13 +51,19 @@ export function getVaultAttachmentCandidates(
 	);
 }
 
+export type ResolvedLinks = Record<string, Record<string, number>>;
+
+export function getResolvedLinks(app: App): ResolvedLinks {
+	return app.metadataCache.resolvedLinks;
+}
+
 /**
  * Referenced vault paths from Obsidian's link index (markdown, canvas, frontmatter, etc.).
  */
 export function collectReferencedPathsFromCache(app: App): Set<string> {
 	const referenced = new Set<string>();
 
-	for (const targets of Object.values(app.metadataCache.resolvedLinks)) {
+	for (const targets of Object.values(getResolvedLinks(app))) {
 		for (const [targetPath, count] of Object.entries(targets)) {
 			if (count > 0) {
 				referenced.add(normalizePath(targetPath));
@@ -89,7 +95,7 @@ function addReferencer(
 export function collectReferencersFromCache(app: App): Map<string, Set<string>> {
 	const referencers = new Map<string, Set<string>>();
 
-	for (const [sourcePath, targets] of Object.entries(app.metadataCache.resolvedLinks)) {
+	for (const [sourcePath, targets] of Object.entries(getResolvedLinks(app))) {
 		for (const [targetPath, count] of Object.entries(targets)) {
 			if (count > 0) {
 				addReferencer(referencers, targetPath, sourcePath);

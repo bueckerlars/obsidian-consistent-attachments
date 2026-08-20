@@ -112,7 +112,7 @@ export class OrphanModal extends Modal {
 		const actions = contentEl.createDiv({ cls: "consistent-attachments-orphan-actions" });
 		new Setting(actions)
 			.addButton((button) =>
-				button.setButtonText("Delete shown").setWarning().onClick(() => {
+				button.setButtonText("Delete shown").setDestructive().onClick(() => {
 					void this.deleteShown(this.getVisibleOrphans());
 				})
 			)
@@ -165,7 +165,7 @@ export class OrphanModal extends Modal {
 				})
 			)
 			.addButton((button) =>
-				button.setIcon("trash").setTooltip("Move to trash").setWarning().onClick(() => {
+				button.setIcon("trash").setTooltip("Move to trash").setDestructive().onClick(() => {
 					void this.deleteFile(file);
 				})
 			);
