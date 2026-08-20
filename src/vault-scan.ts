@@ -1,7 +1,7 @@
 import { normalizePath, TFile, type App } from "obsidian";
 import { extractAttachmentLinks } from "./parser";
 import { resolveAttachmentFiles } from "./resolver";
-import { isPathExcluded } from "./safety";
+import { isFileExcluded, isPathExcluded } from "./safety";
 
 /** Obsidian-native vault files that are not note attachments. */
 const NON_ATTACHMENT_EXTENSIONS = new Set(["base", "canvas"]);
@@ -38,9 +38,16 @@ interface CanvasDocument {
  * All non-markdown attachment candidates in the vault.
  * Uses {@link Vault.getFiles} and filters by extension.
  */
-export function getVaultAttachmentCandidates(app: App, excludedFolders: string[] = []): TFile[] {
+export function getVaultAttachmentCandidates(
+	app: App,
+	excludedFolders: string[] = [],
+	excludedFilePatterns: string[] = []
+): TFile[] {
 	return app.vault.getFiles().filter(
-		(file) => isAttachmentCandidate(file) && !isPathExcluded(file.path, excludedFolders)
+		(file) =>
+			isAttachmentCandidate(file) &&
+			!isPathExcluded(file.path, excludedFolders) &&
+			!isFileExcluded(file.path, excludedFilePatterns)
 	);
 }
 

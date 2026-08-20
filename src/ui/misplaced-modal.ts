@@ -1,4 +1,4 @@
-import { App, Modal, normalizePath, Notice, Setting, TFile } from "obsidian";
+import { App, Modal, normalizePath, Notice, Setting, TFile, type ButtonComponent } from "obsidian";
 import { revealFileInExplorer } from "../file-explorer";
 import type { MisplacedAttachment } from "../types";
 import { ConfirmModal } from "./confirm-modal";
@@ -27,6 +27,9 @@ export class MisplacedModal extends Modal {
 	private filterText = "";
 	private sortKey: SortKey = "path";
 	private relocating = false;
+	private summaryEl: HTMLElement | null = null;
+	private listEl: HTMLElement | null = null;
+	private relocateShownButton: ButtonComponent | null = null;
 
 	constructor(
 		app: App,
@@ -74,6 +77,9 @@ export class MisplacedModal extends Modal {
 	private render(): void {
 		const { contentEl } = this;
 		contentEl.empty();
+		this.summaryEl = null;
+		this.listEl = null;
+		this.relocateShownButton = null;
 
 		contentEl.createEl("h3", { text: "Misplaced attachments" });
 
@@ -82,13 +88,9 @@ export class MisplacedModal extends Modal {
 			return;
 		}
 
-		const visible = this.getVisibleItems();
-		const summary = contentEl.createEl("p", {
+		this.summaryEl = contentEl.createEl("p", {
 			cls: "consistent-attachments-misplaced-summary",
 		});
-		summary.setText(
-			`${this.items.length} linked file(s) not at the expected path, ${formatFileSize(totalSize(this.items))} total. Showing ${visible.length}.`
-		);
 
 		contentEl.createEl("p", {
 			cls: "consistent-attachments-misplaced-hint",
@@ -100,9 +102,10 @@ export class MisplacedModal extends Modal {
 			.addText((text) => {
 				text.setPlaceholder("Search by name, path, or note…");
 				text.setValue(this.filterText);
+				// Only re-render the list so the input element survives and keeps focus.
 				text.onChange((value) => {
 					this.filterText = value;
-					this.render();
+					this.renderList();
 				});
 			});
 
@@ -116,36 +119,52 @@ export class MisplacedModal extends Modal {
 					.setValue(this.sortKey)
 					.onChange((value) => {
 						this.sortKey = value as SortKey;
-						this.render();
+						this.renderList();
 					});
 			});
 
-		const list = contentEl.createDiv({ cls: "consistent-attachments-misplaced-list" });
-
-		if (visible.length === 0) {
-			list.createEl("p", { text: "No files match your filter." });
-		} else {
-			for (const item of visible) {
-				this.renderRow(list, item);
-			}
-		}
+		this.listEl = contentEl.createDiv({ cls: "consistent-attachments-misplaced-list" });
 
 		const footer = contentEl.createDiv({ cls: "consistent-attachments-misplaced-actions" });
 		new Setting(footer)
-			.addButton((button) =>
+			.addButton((button) => {
+				this.relocateShownButton = button;
 				button
 					.setButtonText("Relocate shown")
 					.setCta()
-					.setDisabled(this.relocating || visible.length === 0)
 					.onClick(() => {
-						void this.relocateShown(visible);
-					})
-			)
+						void this.relocateShown(this.getVisibleItems());
+					});
+			})
 			.addButton((button) =>
 				button.setButtonText("Close").onClick(() => {
 					this.close();
 				})
 			);
+
+		this.renderList();
+	}
+
+	private renderList(): void {
+		if (!this.summaryEl || !this.listEl) {
+			return;
+		}
+
+		const visible = this.getVisibleItems();
+		this.summaryEl.setText(
+			`${this.items.length} linked file(s) not at the expected path, ${formatFileSize(totalSize(this.items))} total. Showing ${visible.length}.`
+		);
+
+		this.relocateShownButton?.setDisabled(this.relocating || visible.length === 0);
+
+		this.listEl.empty();
+		if (visible.length === 0) {
+			this.listEl.createEl("p", { text: "No files match your filter." });
+		} else {
+			for (const item of visible) {
+				this.renderRow(this.listEl, item);
+			}
+		}
 	}
 
 	private renderRow(container: HTMLElement, item: MisplacedAttachment): void {

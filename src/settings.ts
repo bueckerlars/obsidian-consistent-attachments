@@ -5,6 +5,7 @@ import type { ConsistentAttachmentsSettings, SharedAttachmentStrategy, TargetPat
 export const DEFAULT_SETTINGS: ConsistentAttachmentsSettings = {
 	autoMoveEnabled: true,
 	excludedFolders: [],
+	excludedFilePatterns: [],
 	sharedAttachmentStrategy: "skip",
 	targetPathMode: "obsidian-default",
 	noteSubfolderName: "assets",
@@ -19,9 +20,15 @@ export function sanitizeSettings(settings: ConsistentAttachmentsSettings): Consi
 		.map((value) => normalizePath(value.trim()))
 		.filter((value) => value.length > 0);
 
+	// Patterns are kept verbatim (trimmed only); normalizePath would mangle wildcard entries.
+	const cleanFilePatterns = settings.excludedFilePatterns
+		.map((value) => value.trim())
+		.filter((value) => value.length > 0);
+
 	return {
 		...settings,
 		excludedFolders: cleanExcluded,
+		excludedFilePatterns: cleanFilePatterns,
 		noteSubfolderName: settings.noteSubfolderName.trim() || "assets",
 		fixedFolderPath: normalizePath(settings.fixedFolderPath.trim() || "attachments"),
 		logLimit: Math.max(20, settings.logLimit),
@@ -121,12 +128,31 @@ export class ConsistentAttachmentsSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Excluded folders")
-			.setDesc("Comma-separated vault paths where note move events are ignored.")
+			.setDesc(
+				"Comma-separated vault paths or wildcard patterns (e.g. */__WIP) that are skipped by attachment moves and scans."
+			)
 			.addTextArea((area) =>
 				area
 					.setValue(this.plugin.settings.excludedFolders.join(", "))
 					.onChange(async (value) => {
 						this.plugin.settings.excludedFolders = value
+							.split(",")
+							.map((entry) => entry.trim())
+							.filter((entry) => entry.length > 0);
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Excluded file patterns")
+			.setDesc(
+				"Comma-separated wildcard patterns for attachment files to ignore, e.g. *.py, *-generated.svg. Patterns without a slash match the file name, patterns with a slash match the full vault path."
+			)
+			.addTextArea((area) =>
+				area
+					.setValue(this.plugin.settings.excludedFilePatterns.join(", "))
+					.onChange(async (value) => {
+						this.plugin.settings.excludedFilePatterns = value
 							.split(",")
 							.map((entry) => entry.trim())
 							.filter((entry) => entry.length > 0);
