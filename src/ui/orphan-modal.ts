@@ -1,4 +1,4 @@
-import { App, Modal, Notice, Setting, TFile } from "obsidian";
+import { App, Modal, Notice, Setting, TFile, type ButtonComponent } from "obsidian";
 import { revealFileInExplorer } from "../file-explorer";
 import { ConfirmModal } from "./confirm-modal";
 
@@ -21,6 +21,9 @@ function totalSize(files: TFile[]): number {
 export class OrphanModal extends Modal {
 	private filterText = "";
 	private sortKey: SortKey = "path";
+	private summaryEl: HTMLElement | null = null;
+	private listEl: HTMLElement | null = null;
+	private deleteShownButton: ButtonComponent | null = null;
 
 	constructor(
 		app: App,
@@ -65,6 +68,9 @@ export class OrphanModal extends Modal {
 	private render(): void {
 		const { contentEl } = this;
 		contentEl.empty();
+		this.summaryEl = null;
+		this.listEl = null;
+		this.deleteShownButton = null;
 
 		contentEl.createEl("h3", { text: "Orphaned attachments" });
 
@@ -73,22 +79,19 @@ export class OrphanModal extends Modal {
 			return;
 		}
 
-		const visible = this.getVisibleOrphans();
-		const summary = contentEl.createEl("p", {
+		this.summaryEl = contentEl.createEl("p", {
 			cls: "consistent-attachments-orphan-summary",
 		});
-		summary.setText(
-			`${this.orphans.length} unreferenced file(s), ${formatFileSize(totalSize(this.orphans))} total. Showing ${visible.length}.`
-		);
 
 		new Setting(contentEl)
 			.setName("Filter")
 			.addText((text) => {
 				text.setPlaceholder("Search by name or path…");
 				text.setValue(this.filterText);
+				// Only re-render the list so the input element survives and keeps focus.
 				text.onChange((value) => {
 					this.filterText = value;
-					this.render();
+					this.renderList();
 				});
 			});
 
@@ -102,32 +105,49 @@ export class OrphanModal extends Modal {
 					.setValue(this.sortKey)
 					.onChange((value) => {
 						this.sortKey = value as SortKey;
-						this.render();
+						this.renderList();
 					});
 			});
 
-		const list = contentEl.createDiv({ cls: "consistent-attachments-orphan-list" });
-
-		if (visible.length === 0) {
-			list.createEl("p", { text: "No files match your filter." });
-		} else {
-			for (const file of visible) {
-				this.renderRow(list, file);
-			}
-		}
+		this.listEl = contentEl.createDiv({ cls: "consistent-attachments-orphan-list" });
 
 		const actions = contentEl.createDiv({ cls: "consistent-attachments-orphan-actions" });
 		new Setting(actions)
-			.addButton((button) =>
-				button.setButtonText("Delete shown").setWarning().onClick(() => {
-					void this.deleteShown(visible);
-				})
-			)
+			.addButton((button) => {
+				this.deleteShownButton = button;
+				button.setButtonText("Delete shown").setDestructive().onClick(() => {
+					void this.deleteShown(this.getVisibleOrphans());
+				});
+			})
 			.addButton((button) =>
 				button.setButtonText("Close").onClick(() => {
 					this.close();
 				})
 			);
+
+		this.renderList();
+	}
+
+	private renderList(): void {
+		if (!this.summaryEl || !this.listEl) {
+			return;
+		}
+
+		const visible = this.getVisibleOrphans();
+		this.summaryEl.setText(
+			`${this.orphans.length} unreferenced file(s), ${formatFileSize(totalSize(this.orphans))} total. Showing ${visible.length}.`
+		);
+
+		this.deleteShownButton?.setDisabled(visible.length === 0);
+
+		this.listEl.empty();
+		if (visible.length === 0) {
+			this.listEl.createEl("p", { text: "No files match your filter." });
+		} else {
+			for (const file of visible) {
+				this.renderRow(this.listEl, file);
+			}
+		}
 	}
 
 	private renderRow(container: HTMLElement, file: TFile): void {
@@ -150,7 +170,7 @@ export class OrphanModal extends Modal {
 				})
 			)
 			.addButton((button) =>
-				button.setIcon("trash").setTooltip("Move to trash").setWarning().onClick(() => {
+				button.setIcon("trash").setTooltip("Move to trash").setDestructive().onClick(() => {
 					void this.deleteFile(file);
 				})
 			);

@@ -6,6 +6,7 @@ export type TargetPathMode = "obsidian-default" | "note-subfolder" | "same-folde
 export interface ConsistentAttachmentsSettings {
 	autoMoveEnabled: boolean;
 	excludedFolders: string[];
+	excludedFilePatterns: string[];
 	sharedAttachmentStrategy: SharedAttachmentStrategy;
 	targetPathMode: TargetPathMode;
 	noteSubfolderName: string;

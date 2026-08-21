@@ -1,7 +1,7 @@
 import { normalizePath, TFile, type App } from "obsidian";
 import { extractAttachmentLinks } from "./parser";
 import { resolveAttachmentFiles } from "./resolver";
-import { isPathExcluded } from "./safety";
+import { isFileExcluded, isPathExcluded } from "./safety";
 
 /** Obsidian-native vault files that are not note attachments. */
 const NON_ATTACHMENT_EXTENSIONS = new Set(["base", "canvas"]);
@@ -38,10 +38,23 @@ interface CanvasDocument {
  * All non-markdown attachment candidates in the vault.
  * Uses {@link Vault.getFiles} and filters by extension.
  */
-export function getVaultAttachmentCandidates(app: App, excludedFolders: string[] = []): TFile[] {
+export function getVaultAttachmentCandidates(
+	app: App,
+	excludedFolders: string[] = [],
+	excludedFilePatterns: string[] = []
+): TFile[] {
 	return app.vault.getFiles().filter(
-		(file) => isAttachmentCandidate(file) && !isPathExcluded(file.path, excludedFolders)
+		(file) =>
+			isAttachmentCandidate(file) &&
+			!isPathExcluded(file.path, excludedFolders) &&
+			!isFileExcluded(file.path, excludedFilePatterns)
 	);
+}
+
+export type ResolvedLinks = Record<string, Record<string, number>>;
+
+export function getResolvedLinks(app: App): ResolvedLinks {
+	return app.metadataCache.resolvedLinks;
 }
 
 /**
@@ -50,7 +63,7 @@ export function getVaultAttachmentCandidates(app: App, excludedFolders: string[]
 export function collectReferencedPathsFromCache(app: App): Set<string> {
 	const referenced = new Set<string>();
 
-	for (const targets of Object.values(app.metadataCache.resolvedLinks)) {
+	for (const targets of Object.values(getResolvedLinks(app))) {
 		for (const [targetPath, count] of Object.entries(targets)) {
 			if (count > 0) {
 				referenced.add(normalizePath(targetPath));
@@ -82,7 +95,7 @@ function addReferencer(
 export function collectReferencersFromCache(app: App): Map<string, Set<string>> {
 	const referencers = new Map<string, Set<string>>();
 
-	for (const [sourcePath, targets] of Object.entries(app.metadataCache.resolvedLinks)) {
+	for (const [sourcePath, targets] of Object.entries(getResolvedLinks(app))) {
 		for (const [targetPath, count] of Object.entries(targets)) {
 			if (count > 0) {
 				addReferencer(referencers, targetPath, sourcePath);

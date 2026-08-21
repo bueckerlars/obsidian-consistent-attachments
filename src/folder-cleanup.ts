@@ -127,9 +127,7 @@ async function removeEmptyFolder(app: App, folderPath: string): Promise<boolean>
 		return false;
 	}
 
-	// Empty attachment folders should be removed from the vault tree, not sent to trash.
-	// eslint-disable-next-line obsidianmd/prefer-file-manager-trash-file -- intentional removal of empty dirs
-	await app.vault.delete(folder);
+	await app.fileManager.trashFile(folder);
 	return true;
 }
 

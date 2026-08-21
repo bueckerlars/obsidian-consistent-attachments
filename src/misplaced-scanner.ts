@@ -19,7 +19,11 @@ export async function findMisplacedAttachments(
 	const referencers = await buildAttachmentReferencers(app, excludedFolders);
 	const misplaced: MisplacedAttachment[] = [];
 
-	for (const file of getVaultAttachmentCandidates(app, excludedFolders)) {
+	for (const file of getVaultAttachmentCandidates(
+		app,
+		excludedFolders,
+		settings.excludedFilePatterns
+	)) {
 		const noteReferencers = getMarkdownReferencers(app, referencers.get(normalizePath(file.path)));
 		if (noteReferencers.size === 0) {
 			continue;

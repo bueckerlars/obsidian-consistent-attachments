@@ -7,8 +7,8 @@ import { findOrphanAttachments } from "./orphan-scanner";
 import { extractAttachmentLinks } from "./parser";
 import { resolveAttachmentFiles } from "./resolver";
 import { DEFAULT_SETTINGS, ConsistentAttachmentsSettingTab, sanitizeSettings } from "./settings";
-import { isPathExcluded, isRenameOnly } from "./safety";
-import { getMarkdownNotes } from "./vault-scan";
+import { isFileExcluded, isPathExcluded, isRenameOnly } from "./safety";
+import { getMarkdownNotes, getResolvedLinks } from "./vault-scan";
 import type { ConsistentAttachmentsSettings, MisplacedAttachment } from "./types";
 import { LogModal } from "./ui/log-modal";
 import { MisplacedModal } from "./ui/misplaced-modal";
@@ -87,7 +87,11 @@ export default class ConsistentAttachmentsPlugin extends Plugin {
 			id: "find-orphaned-attachments",
 			name: "Find orphaned attachments",
 			callback: async () => {
-				const orphans = await findOrphanAttachments(this.app, this.settings.excludedFolders);
+				const orphans = await findOrphanAttachments(
+					this.app,
+					this.settings.excludedFolders,
+					this.settings.excludedFilePatterns
+				);
 				new OrphanModal(this.app, orphans).open();
 			},
 		});
@@ -174,7 +178,11 @@ export default class ConsistentAttachmentsPlugin extends Plugin {
 		const attachments = resolveAttachmentFiles(links, note.path, {
 			resolveFirstLinkpathDest: (linktext, sourcePath) =>
 				this.app.metadataCache.getFirstLinkpathDest(linktext, sourcePath),
-		});
+		}).filter(
+			(file) =>
+				!isPathExcluded(file.path, this.settings.excludedFolders) &&
+				!isFileExcluded(file.path, this.settings.excludedFilePatterns)
+		);
 
 		await moveOrCopyAttachmentsForNote(
 			{
@@ -248,7 +256,7 @@ export default class ConsistentAttachmentsPlugin extends Plugin {
 	}
 
 	private isSharedAttachment(file: TFile, ownerNotePath: string): boolean {
-		const resolvedLinks = this.app.metadataCache.resolvedLinks;
+		const resolvedLinks = getResolvedLinks(this.app);
 		const targetPath = file.path;
 		for (const [sourcePath, targets] of Object.entries(resolvedLinks)) {
 			if (sourcePath === ownerNotePath) {

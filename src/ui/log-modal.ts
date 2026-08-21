@@ -23,14 +23,14 @@ export class LogModal extends Modal {
 		for (const entry of this.entries) {
 			const row = contentEl.createDiv({ cls: "consistent-attachments-log-row" });
 			row.createEl("strong", { text: `${formatTime(entry.timestamp)} - ${entry.status.toUpperCase()}` });
-			row.createEl("div", { text: `Note: ${entry.notePath}` });
+			row.createDiv({ text: `Note: ${entry.notePath}` });
 			if (entry.sourcePath) {
-				row.createEl("div", { text: `From: ${entry.sourcePath}` });
+				row.createDiv({ text: `From: ${entry.sourcePath}` });
 			}
 			if (entry.targetPath) {
-				row.createEl("div", { text: `To: ${entry.targetPath}` });
+				row.createDiv({ text: `To: ${entry.targetPath}` });
 			}
-			row.createEl("div", { text: `Reason: ${entry.reason}` });
+			row.createDiv({ text: `Reason: ${entry.reason}` });
 			row.createEl("hr");
 		}
 	}
