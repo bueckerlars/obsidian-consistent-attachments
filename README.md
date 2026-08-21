@@ -61,8 +61,9 @@ This plugin automates the common cases while preserving control for edge cases.
   - `Subfolder of note` (configure subfolder name)
   - `Same folder as note`
   - `Fixed vault folder` (configure fixed path)
-- **Delete empty attachment folders**: remove note-local attachment subfolders left empty after a move.
-- **Excluded folders**: ignore note moves inside selected paths.
+- **Delete empty attachment folders**: send note-local attachment subfolders to trash when they are left empty after a move.
+- **Excluded folders**: comma-separated vault paths or wildcard patterns skipped by attachment moves and scans (for example `*/__WIP`). A lone `*` matches every folder.
+- **Excluded file patterns**: comma-separated wildcard patterns for attachment files to ignore (for example `*.py`, `*-generated.svg`). Patterns without a slash match the file name; patterns with a slash match the full vault path.
 - **Show notices**: display operation summaries in Obsidian notices.
 - **Operation log size**: max number of entries kept in memory.
 
@@ -103,7 +104,7 @@ The plugin never overwrites existing files. If a destination filename already ex
 
 - **Attachments are not moved**
   - verify **Enable auto-move** is on
-  - check excluded folders
+  - check excluded folders and excluded file patterns
   - note-only renames in the same folder are intentionally ignored
 - **Attachments stayed behind after moving a note**
   - run **Find misplaced attachments** to review and relocate them, or **Apply attachment layout to vault** for a full pass
@@ -123,7 +124,7 @@ The plugin never overwrites existing files. If a destination filename already ex
   - **Find orphaned attachments** enumerates vault files with `vault.getFiles()`, maps referencers from `metadataCache.resolvedLinks` and markdown notes, then lists unreferenced attachment candidates.
   - **Find misplaced attachments** uses the same referencer map and plugin target path settings to list linked files that should be relocated (not deleted).
   - **Move attachments for current note** only reads the active note and files referenced by that note.
-  - Excluded folders in settings are skipped during vault-wide scans.
+  - Excluded folders and excluded file patterns in settings are skipped during vault-wide scans.
 - Orphan cleanup in the modal moves files to the vault trash via Obsidian's trash API.
 
 ## Development
@@ -138,5 +139,6 @@ Commands:
 npm install
 npm run build
 npm run lint
+npm test
 npm run dev
 ```

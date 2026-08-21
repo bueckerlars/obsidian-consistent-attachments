@@ -31,6 +31,16 @@ export default tseslint.config(
 			"obsidianmd/settings-tab/prefer-setting-definitions": "error",
 		},
 	},
+	{
+		files: ["**/*.test.ts"],
+		rules: {
+			"obsidianmd/no-nodejs-modules": "off",
+			"obsidianmd/no-unsupported-api": "off",
+			"obsidianmd/prefer-create-el": "off",
+			"obsidianmd/prefer-file-manager-trash-file": "off",
+			"obsidianmd/settings-tab/prefer-setting-definitions": "off",
+		},
+	},
 	globalIgnores([
 		"node_modules",
 		"dist",

@@ -1,4 +1,4 @@
-import { App, Modal, Notice, Setting, TFile } from "obsidian";
+import { App, Modal, Notice, Setting, TFile, type ButtonComponent } from "obsidian";
 import { revealFileInExplorer } from "../file-explorer";
 import { ConfirmModal } from "./confirm-modal";
 
@@ -23,6 +23,7 @@ export class OrphanModal extends Modal {
 	private sortKey: SortKey = "path";
 	private summaryEl: HTMLElement | null = null;
 	private listEl: HTMLElement | null = null;
+	private deleteShownButton: ButtonComponent | null = null;
 
 	constructor(
 		app: App,
@@ -69,6 +70,7 @@ export class OrphanModal extends Modal {
 		contentEl.empty();
 		this.summaryEl = null;
 		this.listEl = null;
+		this.deleteShownButton = null;
 
 		contentEl.createEl("h3", { text: "Orphaned attachments" });
 
@@ -111,11 +113,12 @@ export class OrphanModal extends Modal {
 
 		const actions = contentEl.createDiv({ cls: "consistent-attachments-orphan-actions" });
 		new Setting(actions)
-			.addButton((button) =>
+			.addButton((button) => {
+				this.deleteShownButton = button;
 				button.setButtonText("Delete shown").setDestructive().onClick(() => {
 					void this.deleteShown(this.getVisibleOrphans());
-				})
-			)
+				});
+			})
 			.addButton((button) =>
 				button.setButtonText("Close").onClick(() => {
 					this.close();
@@ -134,6 +137,8 @@ export class OrphanModal extends Modal {
 		this.summaryEl.setText(
 			`${this.orphans.length} unreferenced file(s), ${formatFileSize(totalSize(this.orphans))} total. Showing ${visible.length}.`
 		);
+
+		this.deleteShownButton?.setDisabled(visible.length === 0);
 
 		this.listEl.empty();
 		if (visible.length === 0) {

@@ -13,6 +13,7 @@
 		"noUncheckedIndexedAccess": true,
 		"isolatedModules": true,
 		"allowSyntheticDefaultImports": true,
+		"allowImportingTsExtensions": true,
 		"lib": [
 			"DOM",
 			"ES2020"

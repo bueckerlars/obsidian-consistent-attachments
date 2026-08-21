@@ -1,4 +1,5 @@
 import { App, normalizePath, PluginSettingTab, Setting, type SettingDefinitionItem } from "obsidian";
+import { hasWildcard, prepareFolderPattern } from "./exclusion-match";
 import type ConsistentAttachmentsPlugin from "./main";
 import type { ConsistentAttachmentsSettings } from "./types";
 
@@ -15,10 +16,19 @@ export const DEFAULT_SETTINGS: ConsistentAttachmentsSettings = {
 	logLimit: 150,
 };
 
+function sanitizeFolderExclusion(value: string): string {
+	const prepared = prepareFolderPattern(value);
+	if (!prepared) {
+		return "";
+	}
+	if (hasWildcard(prepared)) {
+		return prepared;
+	}
+	return normalizePath(prepared);
+}
+
 export function sanitizeSettings(settings: ConsistentAttachmentsSettings): ConsistentAttachmentsSettings {
-	const cleanExcluded = settings.excludedFolders
-		.map((value) => normalizePath(value.trim()))
-		.filter((value) => value.length > 0);
+	const cleanExcluded = settings.excludedFolders.map(sanitizeFolderExclusion).filter((value) => value.length > 0);
 
 	// Patterns are kept verbatim (trimmed only); normalizePath would mangle wildcard entries.
 	const cleanFilePatterns = settings.excludedFilePatterns
@@ -43,13 +53,59 @@ function parseCommaSeparated(value: string): string[] {
 }
 
 export class ConsistentAttachmentsSettingTab extends PluginSettingTab {
+	private pendingExcludedFolders: string | null = null;
+	private pendingExcludedFilePatterns: string | null = null;
+
 	constructor(app: App, private readonly plugin: ConsistentAttachmentsPlugin) {
 		super(app, plugin);
 	}
 
+	hide(): void {
+		void this.flushExclusionFields();
+		super.hide();
+	}
+
 	async setControlValue(key: string, value: unknown): Promise<void> {
+		await this.flushExclusionFields();
 		Object.assign(this.plugin.settings, { [key]: value });
 		await this.plugin.saveSettings();
+	}
+
+	private async flushExclusionFields(): Promise<void> {
+		let changed = false;
+		if (this.pendingExcludedFolders !== null) {
+			this.plugin.settings.excludedFolders = parseCommaSeparated(this.pendingExcludedFolders);
+			this.pendingExcludedFolders = null;
+			changed = true;
+		}
+		if (this.pendingExcludedFilePatterns !== null) {
+			this.plugin.settings.excludedFilePatterns = parseCommaSeparated(this.pendingExcludedFilePatterns);
+			this.pendingExcludedFilePatterns = null;
+			changed = true;
+		}
+		if (changed) {
+			await this.plugin.saveSettings();
+		}
+	}
+
+	private bindExclusionTextArea(
+		setting: Setting,
+		currentValue: string[],
+		onDraft: (value: string) => void
+	): () => void {
+		let inputEl: HTMLTextAreaElement | null = null;
+		const persist = (): void => {
+			void this.flushExclusionFields();
+		};
+		setting.addTextArea((area) => {
+			inputEl = area.inputEl;
+			area.setValue(currentValue.join(", "));
+			area.inputEl.addEventListener("blur", persist);
+			area.onChange(onDraft);
+		});
+		return () => {
+			inputEl?.removeEventListener("blur", persist);
+		};
 	}
 
 	getSettingDefinitions(): SettingDefinitionItem[] {
@@ -105,27 +161,23 @@ export class ConsistentAttachmentsSettingTab extends PluginSettingTab {
 			},
 			{
 				name: "Excluded folders",
-				desc: "Comma-separated vault paths or wildcard patterns (e.g. */__WIP) that are skipped by attachment moves and scans.",
+				desc: "Comma-separated vault paths or wildcard patterns skipped by attachment moves and scans (e.g. */__WIP). A lone * matches every folder. Changes are saved when you leave the field.",
 				render: (setting: Setting) => {
-					setting.addTextArea((area) =>
-						area.setValue(this.plugin.settings.excludedFolders.join(", ")).onChange(async (value) => {
-							this.plugin.settings.excludedFolders = parseCommaSeparated(value);
-							await this.plugin.saveSettings();
-						})
-					);
+					return this.bindExclusionTextArea(setting, this.plugin.settings.excludedFolders, (value) => {
+						this.pendingExcludedFolders = value;
+					});
 				},
 			},
 			{
 				name: "Excluded file patterns",
-				desc: "Comma-separated wildcard patterns for attachment files to ignore, e.g. *.py, *-generated.svg. Patterns without a slash match the file name, patterns with a slash match the full vault path.",
+				desc: "Comma-separated wildcard patterns for attachment files to ignore, e.g. *.py, *-generated.svg. Patterns without a slash match the file name, patterns with a slash match the full vault path. Changes are saved when you leave the field.",
 				render: (setting: Setting) => {
-					setting.addTextArea((area) =>
-						area
-							.setValue(this.plugin.settings.excludedFilePatterns.join(", "))
-							.onChange(async (value) => {
-								this.plugin.settings.excludedFilePatterns = parseCommaSeparated(value);
-								await this.plugin.saveSettings();
-							})
+					return this.bindExclusionTextArea(
+						setting,
+						this.plugin.settings.excludedFilePatterns,
+						(value) => {
+							this.pendingExcludedFilePatterns = value;
+						}
 					);
 				},
 			},
