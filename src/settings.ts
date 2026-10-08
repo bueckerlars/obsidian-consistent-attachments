@@ -8,6 +8,7 @@ export const DEFAULT_SETTINGS: ConsistentAttachmentsSettings = {
 	excludedFolders: [],
 	excludedFilePatterns: [],
 	sharedAttachmentStrategy: "skip",
+	hideUnmovableMisplacedResults: true,
 	targetPathMode: "obsidian-default",
 	noteSubfolderName: "assets",
 	fixedFolderPath: "attachments",
@@ -127,6 +128,11 @@ export class ConsistentAttachmentsSettingTab extends PluginSettingTab {
 						ask: "Ask every time",
 					},
 				},
+			},
+			{
+				name: "Hide unmovable misplaced results",
+				desc: "When finding misplaced attachments, hide files that relocate would skip under the current shared attachment strategy (for example shared files when set to skip). Turn off to inspect every misplaced file, including duplicates.",
+				control: { type: "toggle", key: "hideUnmovableMisplacedResults" },
 			},
 			{
 				name: "Target path mode",
