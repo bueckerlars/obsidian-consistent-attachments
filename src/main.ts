@@ -6,7 +6,7 @@ import { findMisplacedAttachments } from "./misplaced-scanner";
 import { filterMisplacedAttachmentsForDisplay } from "./misplaced-filter";
 import { findOrphanAttachments } from "./orphan-scanner";
 import { extractAttachmentLinks } from "./parser";
-import { resolveAttachmentFiles } from "./resolver";
+import { resolveAttachmentFilesDetailed } from "./resolver";
 import { DEFAULT_SETTINGS, ConsistentAttachmentsSettingTab, sanitizeSettings } from "./settings";
 import { isFileExcluded, isPathExcluded, isRenameOnly } from "./safety";
 import { getMarkdownNotes, getResolvedLinks } from "./vault-scan";
@@ -20,6 +20,8 @@ export default class ConsistentAttachmentsPlugin extends Plugin {
 	private logger = new OperationLogger(() => this.settings.logLimit);
 	private reconcileTimer: number | null = null;
 	private reconcileRunning = false;
+	/** Serializes auto-move work so batch note moves do not race. */
+	private autoMoveQueue: Promise<void> = Promise.resolve();
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -36,9 +38,15 @@ export default class ConsistentAttachmentsPlugin extends Plugin {
 		}
 	}
 
+	private enqueueAutoMove(task: () => Promise<void>): void {
+		this.autoMoveQueue = this.autoMoveQueue.then(task).catch((error) => {
+			console.error("Consistent Attachments: auto-move failed", error);
+		});
+	}
+
 	private registerRenameHandler(): void {
 		this.registerEvent(
-			this.app.vault.on("rename", async (file, oldPath) => {
+			this.app.vault.on("rename", (file, oldPath) => {
 				if (!(file instanceof TFile) || file.extension !== "md") {
 					return;
 				}
@@ -55,7 +63,9 @@ export default class ConsistentAttachmentsPlugin extends Plugin {
 					return;
 				}
 
-				await this.moveAttachmentsForNote(file, { previousNotePath: oldPath });
+				this.enqueueAutoMove(() =>
+					this.moveAttachmentsForNote(file, { previousNotePath: oldPath, silent: true })
+				);
 			})
 		);
 	}
@@ -181,10 +191,25 @@ export default class ConsistentAttachmentsPlugin extends Plugin {
 	): Promise<void> {
 		const markdown = await this.app.vault.cachedRead(note);
 		const links = extractAttachmentLinks(markdown);
-		const attachments = resolveAttachmentFiles(links, note.path, {
+		const sourcePaths = options?.previousNotePath
+			? [options.previousNotePath, note.path]
+			: [note.path];
+		const { files, unresolvedTargets } = resolveAttachmentFilesDetailed(links, sourcePaths, {
 			resolveFirstLinkpathDest: (linktext, sourcePath) =>
 				this.app.metadataCache.getFirstLinkpathDest(linktext, sourcePath),
-		}).filter(
+		});
+
+		for (const target of unresolvedTargets) {
+			this.logger.add({
+				timestamp: Date.now(),
+				notePath: note.path,
+				sourcePath: target,
+				status: "skipped",
+				reason: "unresolved-link",
+			});
+		}
+
+		const attachments = files.filter(
 			(file) =>
 				!isPathExcluded(file.path, this.settings.excludedFolders) &&
 				!isFileExcluded(file.path, this.settings.excludedFilePatterns)
