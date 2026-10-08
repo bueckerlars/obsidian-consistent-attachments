@@ -3,6 +3,7 @@ import { hasAttachmentLayoutChanged } from "./attachment-path";
 import { OperationLogger } from "./logger";
 import { moveOrCopyAttachmentsForNote } from "./mover";
 import { findMisplacedAttachments } from "./misplaced-scanner";
+import { filterMisplacedAttachmentsForDisplay } from "./misplaced-filter";
 import { findOrphanAttachments } from "./orphan-scanner";
 import { extractAttachmentLinks } from "./parser";
 import { resolveAttachmentFilesDetailed } from "./resolver";
@@ -115,7 +116,12 @@ export default class ConsistentAttachmentsPlugin extends Plugin {
 					this.settings,
 					this.settings.excludedFolders
 				);
-				new MisplacedModal(this.app, misplaced, {
+				const visible = filterMisplacedAttachmentsForDisplay(
+					misplaced,
+					this.settings,
+					(file, ownerNotePath) => this.isSharedAttachment(file, ownerNotePath)
+				);
+				new MisplacedModal(this.app, visible, {
 					relocate: (item) => this.relocateMisplacedAttachment(item),
 				}).open();
 			},

@@ -8,6 +8,8 @@ export interface ConsistentAttachmentsSettings {
 	excludedFolders: string[];
 	excludedFilePatterns: string[];
 	sharedAttachmentStrategy: SharedAttachmentStrategy;
+	/** When true, Find misplaced attachments omits files that relocate would skip (e.g. shared + skip). */
+	hideUnmovableMisplacedResults: boolean;
 	targetPathMode: TargetPathMode;
 	noteSubfolderName: string;
 	fixedFolderPath: string;
